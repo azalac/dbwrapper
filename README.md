@@ -1,11 +1,11 @@
 
-# dbwrapper (aka dbwrapper-python)
+# dbwrapper
 
 ## Note: this library is pre-alpha.
 
-This version of *dbwrapper* is highly subject to change. Due to this, I won't be documenting a lot of the API. I tried to make the code fairly readable and code-suggestion friendly. I'm not planning on changing the structure of the classes / factories, but function arguments will definitely change.
+This version of dbwrapper is highly subject to change. Due to this, I won't be documenting a lot of the API. I tried to make the code fairly readable and code-suggestion friendly. I'm not planning on changing the structure of the major classes, but function arguments will definitely change and features will definitely be removed or addded.
 
-*dbwrapper* is a lightweight python library designed to simplify interacting with databases of all kinds. This is not an ORM, and I have no plans to make it one. *dbwrapper* allows programmers to easily create queries using a fluent API. The primary focus of this library is to make data persistance database-agnostic while keeping query overhead low.
+dbwrapper is a lightweight python library designed to simplify interacting with databases of all kinds. This is not an ORM, and I have no plans to make it one. dbwrapper allows programmers to easily create queries using a fluent API. The primary focus of this library is to make data persistance database-agnostic while keeping query overhead low.
 
 ## Supported Databases
 
@@ -14,7 +14,7 @@ This version of *dbwrapper* is highly subject to change. Due to this, I won't be
 
 ## Databases with planned support
 
-- Sql Server
+- SQL Server
 - MySQL
 - MongoDB
 
@@ -32,6 +32,7 @@ This version of *dbwrapper* is highly subject to change. Due to this, I won't be
 - SQL Functions (partially implemented)
 - Connection Pooling
 - Built in logging and query profiling (just enable it using logging.basicConfig)
+- Common Table Expressions & Subqueries
 
 ## Simple Example Usage
 

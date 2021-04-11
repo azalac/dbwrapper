@@ -1,6 +1,6 @@
 
 dist/
-dbwrapper.egg-info
+dbwrapper_python.egg-info
 build/
 
 __pycache__

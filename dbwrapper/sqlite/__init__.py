@@ -1,6 +1,6 @@
 
 from dbwrapper.sqlite._conn import Connection, MASTER_DB, TEMP_DB
-from dbwrapper.sqlite._query import Condition
+from dbwrapper._query import Condition
 
 __all__ = [
     "Connection",

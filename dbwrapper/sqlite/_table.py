@@ -3,8 +3,12 @@ import logging
 import re
 import weakref
 
-from dbwrapper.sqlite._query import Query, Update, Delete, Condition
-from dbwrapper._util import sql, escape_value, execute, executemany, cached_property, Navigator, computeIfAbsent, Literal
+from dbwrapper._query import Query, Update, Delete, Condition, Column
+from dbwrapper._util import (
+    sql, escape_value, execute, executemany,
+    cached_property, Navigator, computeIfAbsent,
+    Literal
+)
 
 number_regex = re.compile(r"\d+\.?\d*")
 
@@ -21,13 +25,10 @@ class Table:
         return "Table[{0}.{1}]" % (self.db, self.name)
     
     def __sql__(self, usage=None):
-        if not self.alias or usage == "raw":
+        if not self.alias or usage == "table-noalias":
             return self.db + "." + self.name
 
-        if usage == "name":
-            return self.name
-
-        if usage in ("select", "join"):
+        if usage in ("table-like", "table"):
             return self.db + "." + self.name + " AS " + self.alias
         else:
             return self.alias
@@ -220,7 +221,7 @@ class TableFactory:
         return self
     
     def __sql__(self, **kwargs):
-        s = "CREATE TABLE %s (" % sql(self._table, usage="raw")
+        s = "CREATE TABLE %s (" % sql(self._table, usage="table-noalias")
         chunks = []
         constraints = {}
         for (name, col) in self._columns.items():
@@ -341,43 +342,3 @@ class TableFactory:
     def __exit__(self, type, value, tb):
         if not value:
             self.create()
-
-_COLUMN_IS_IN_CACHE = weakref.WeakKeyDictionary()
-
-_COLUMNS_IS_IN_LARGE_THRESHOLD = 16
-
-class Column(Condition):
-    def __init__(self, table, colname):
-        self.table = table
-        self.colname = colname
-    
-    def __repr__(self):
-        return "Column[%s.%s]" % (sql(self.table), self.colname)
-
-    def __sql__(self, usage=None):
-        if usage in ("update", "raw"):
-            return self.colname
-        else:
-            return "%s.%s" % (sql(self.table), self.colname)
-
-    def __hash__(self):
-        return hash(self.__sql__())
-        
-    def is_in(self, values):
-        is_large = False
-        
-        # try:
-        #     if len(values) > _COLUMNS_IS_IN_LARGE_THRESHOLD:
-        #         is_large = True
-        # except TypeError:
-        #     pass
-
-        lst = None
-
-        if False: #and values not in _COLUMN_IS_IN_CACHE and is_large:
-            lst = Literal("(%s)" % (",".join(sql(x) for x in values)))
-            _COLUMN_IS_IN_CACHE[values] = lst
-        else:
-            lst = Literal("(%s)" % (",".join(sql(x) for x in values)))
-
-        return Condition(self, Literal("IN"), lst)

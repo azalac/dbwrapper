@@ -9,9 +9,9 @@ def migrate(db, migrations: typing.Iterable[typing.Callable], migration_table="_
     vtbl = db.table(migration_table)
 
     if not vtbl.exists():
-        with vtbl.builder() as builder:
-            builder.column("latest", db.dtypes.integer)
-        db.commit()
+        with db:
+            with vtbl.builder() as builder:
+                builder.column("latest", db.dtypes.integer)
     
     v = vtbl.select(vtbl.columns.latest).execute()
 

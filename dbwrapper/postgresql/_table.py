@@ -6,8 +6,12 @@ number_regex = re.compile(r"\d+\.?\d*")
 
 import logging
 
-from dbwrapper.postgresql._query import Query, Update, Delete, Condition
-from dbwrapper._util import sql, escape_value, execute, executemany, cached_property, Navigator, computeIfAbsent
+from dbwrapper._query import Query, Update, Delete, Condition, Column
+from dbwrapper._util import (
+    sql, escape_value, execute, executemany,
+    cached_property, Navigator, computeIfAbsent,
+    Literal
+)
 
 _LOGGER = logging.getLogger("Table")
 
@@ -20,13 +24,13 @@ class Table:
         self.alias = alias.lower() if alias else alias
     
     def __str__(self):
-        return "Table[%s]" % sql(self, usage="select")
+        return "Table[%s]" % sql(self, usage="table-like")
     
     def __sql__(self, usage=None):
-        if not self.alias or usage == "raw":
+        if not self.alias or usage == "table-noalias":
             return self.pg_schema + "." + self.name
 
-        if usage == "select":
+        if usage in ("table-like", "table"):
             return self.pg_schema + "." + self.name + " AS " + self.alias
         else:
             return self.alias
@@ -177,7 +181,7 @@ class TableFactory:
             if table.db != self._table.db:
                 raise RuntimeError("Must be in the same database")
 
-            table = sql(table, usage="raw")
+            table = sql(table, usage="table-noalias")
 
         for col in column:
             self._columns[col]["fk"] = {
@@ -201,7 +205,10 @@ class TableFactory:
         return self
     
     def __sql__(self, **kwargs):
-        s = "CREATE SCHEMA IF NOT EXISTS %s; CREATE TABLE %s (" % (self._table.pg_schema, sql(self._table, usage="raw"))
+        s = "CREATE SCHEMA IF NOT EXISTS %s; CREATE TABLE %s (" % (
+            self._table.pg_schema,
+            sql(self._table, usage="table-noalias")
+        )
         chunks = []
         constraints = {}
         for (name, col) in self._columns.items():
@@ -283,23 +290,3 @@ class TableFactory:
     def __exit__(self, type, value, tb):
         if not value:
             self.create()
-
-class Column(Condition):
-    def __init__(self, table, colname):
-        self.table = table
-        self.colname = colname
-    
-    def __repr__(self):
-        return "Column[%s.%s]" % (sql(self.table), self.colname)
-
-    def __sql__(self, usage=None):
-        if usage == "update":
-            return self.colname
-        else:
-            return "%s.%s" % (sql(self.table), self.colname)
-
-    def __hash__(self):
-        return hash(self.__sql__())
-
-    def is_in(self, values):
-        return Condition(self, "IN", values)

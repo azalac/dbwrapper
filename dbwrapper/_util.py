@@ -1,7 +1,7 @@
 
 import time
 import re
-NUMBER_REGEX = re.compile(r"\d+\.?\d*")
+NUMBER_REGEX = re.compile(r"^\d+\.?\d*$")
 
 def sql(obj, **kwargs):
     if hasattr(obj, "__sql__"):
@@ -85,10 +85,13 @@ def skip_empty_format(fmt, value, onempty=""):
 def Navigator(obj, nav_name, schema_fn, getter_fn, name_fn=str):
     d = {}
     
+    l = 0
     for name in schema_fn():
         d[name_fn(name)] = property((lambda name: lambda self: getter_fn(name))(name))
+        l += 1
 
     d["__contains__"] = lambda self, x: x in schema_fn()
+    d["__len__"] = lambda self: l
 
     return type(nav_name, (object,), d)()
 
@@ -117,15 +120,17 @@ def Function(text):
         def __str__(self):
             return self.__sql__()
         
-        def __sql__(self, **kwargs):
-            return "%s(%s)%s" % (
-                text,
-                ",".join(sql(x) for x in self.args),
-                (" AS %s" % self.alias) if self.alias else ""
-            )
+        def __sql__(self, usage=None):
+            if usage == "column-like" and self.alias is not None:
+                return self.alias
+            else:
+                return "%s(%s)%s" % (
+                    text,
+                    ",".join(sql(x) for x in self.args),
+                    (" AS %s" % self.alias) if self.alias else ""
+                )
             
         def with_alias(self, alias):
             return func(*self.args, alias=alias)
-
 
     return func

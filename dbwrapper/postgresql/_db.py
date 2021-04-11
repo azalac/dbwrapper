@@ -48,6 +48,7 @@ class Database:
         self.conn = psycopg2.connect(*target[0], **target[1])
         self.conn.isolation_level = extensions.ISOLATION_LEVEL_READ_UNCOMMITTED
         self.pg_schema = "public"
+        self.transactions = []
     
     def get_raw(self):
         return self.conn
@@ -109,15 +110,58 @@ class Database:
 
     def start_transaction(self):
         if self.conn:
-            self._ex("BEGIN")
+            if len(self.transactions) == 0:
+                self._ex("BEGIN;")
+
+            tname = "transaction%d" % len(self.transactions)
+            self.transactions.append(tname)
+            self._ex("SAVEPOINT %s;" % tname)
+
+            return Transaction(self, tname)
     
-    def commit(self):
-        if self.conn:
-            self._ex("COMMIT")
+    def get_current_transaction(self):
+        if self.conn and len(self.transactions) > 0:
+            return self.transactions[-1]
+        else:
+            return None
+
+    def commit(self, tname=None):
+        if isinstance(tname, Transaction):
+            tname = tname.name
+
+        if self.conn and len(self.transactions) > 0 and (self.transactions[-1] == tname or tname is None):
+            self._ex("RELEASE SAVEPOINT %s;" % self.transactions[-1])
+            self.transactions.pop()
+
+            if len(self.transactions) == 0:
+                self._ex("COMMIT;")
+            return True
+        else:
+            return False
         
-    def rollback(self):
-        if self.conn:
-            self._ex("ROLLBACK")
+    def rollback(self, tname=None):
+        if isinstance(tname, Transaction):
+            tname = tname.name
+
+        if self.conn and len(self.transactions) > 0 and (self.transactions[-1] == tname or tname is None):
+            self._ex("ROLLBACK TO SAVEPOINT %s;" % self.transactions[-1])
+            self.transactions.pop()
+
+            if len(self.transactions) == 0:
+                self._ex("COMMIT;")
+            return True
+        else:
+            return False
+
+    def __enter__(self):
+        self.start_transaction()
+        return self
+
+    def __exit__(self, et, ev, tb):
+        if et:
+            self.rollback()
+        else:
+            self.commit()
 
     def get_dtypes(self):
         return [tuple(x) for x in self._ex(_TYPE_QUERY)] + list(TYPE_ALIASES.items())
@@ -130,8 +174,25 @@ class Database:
             lambda x: x[0]
         )
 
+    def _ex(self, sql_str, params=[]):
+        cursor = self.conn.cursor()
+        cursor.execute(sql_str, params)
+        lst = list(cursor.fetchall()) if cursor.rowcount > 0 else []
+        cursor.close()
+        return lst
+
+class Transaction:
+    def __init__(self, db, name):
+        self.db = db
+        self.name = name
+    
+    def rollback(self):
+        return self.db.rollback(self.name)
+    
+    def commit(self):
+        return self.db.commit(self.name)
+
     def __enter__(self):
-        self.start_transaction()
         return self
 
     def __exit__(self, et, ev, tb):
@@ -139,10 +200,3 @@ class Database:
             self.rollback()
         else:
             self.commit()
-
-    def _ex(self, sql_str, params=[]):
-        cursor = self.conn.cursor()
-        cursor.execute(sql_str, params)
-        lst = list(cursor.fetchall()) if cursor.rowcount > 0 else []
-        cursor.close()
-        return lst

@@ -1,7 +1,10 @@
 
 import logging
 
-from dbwrapper._util import sql, execute as sqlexec, skip_empty_join, Literal
+from dbwrapper._util import (
+    sql, execute as sqlexec, skip_empty_join,
+    Literal, Navigator
+)
 
 __all__ = [
     "Query",
@@ -27,7 +30,11 @@ class Query:
         self._join_alias = None
 
     def __sql__(self, usage=None, **kwargs):
-        stmt = "SELECT " + ",".join(sql(c) for c in self._cols) + " FROM " + sql(self._src, usage="select")
+        stmt = "SELECT " \
+            + ",".join(sql(c, usage="value") for c in self._cols) \
+            + " FROM " \
+            + sql(self._src, usage="table-like")
+            
         for join in self._joins:
             stmt += " " + sql(join) + " "
         if self._constraint is not None:
@@ -51,15 +58,31 @@ class Query:
         if self._offset is not None:
             stmt += " OFFSET %s" % sql(self._offset)
         
-        if usage in ('lhs', 'rhs'):
+        if usage  == "value":
             return "(%s)" % stmt
-        elif usage in ('join',):
+        elif usage == 'table-like':
             return "(%s)%s" % (
                 stmt,
-                "AS %s" % sql(self._join_alias) if self._join_alias else ""
+                " AS %s" % sql(self._join_alias) if self._join_alias else ""
             )
         else:
-            return stmt
+            if self._join_alias is not None:
+                return self._join_alias
+            else:
+                return stmt
+
+    @property
+    def columns(self):
+        return Navigator(self, "ColumnList",
+            lambda: [sql(x, usage="column-like") for x in self._cols],
+            lambda x: self.column(x)
+        )
+
+    def column(self, colname):
+        if self._join_alias is None:
+            logging.warn("Referencing query column without query alias - this will be EXTREMELY slow (if it works at all)")
+
+        return Column(Literal(sql(self)), colname)
 
     def where(self, condition):
         self._constraint = condition
@@ -151,12 +174,17 @@ class Update:
         self._having = None
 
     def __sql__(self, **kwargs):
-        stmt = "UPDATE " + sql(self._src, usage="raw") + " SET "
+        stmt = "UPDATE %s SET " % sql(self._src, usage="table")
         
-        stmt += " %s " % (", ".join("%s = %s" % (sql(dst, usage="update"), sql(src)) for (dst, src) in self._updates))
+        stmt += " %s " % (
+            ", ".join("%s = %s" % (
+                sql(dst, usage="column"),
+                sql(src, usage="value")
+            ) for (dst, src) in self._updates)
+        )
 
         for join in self._joins:
-            stmt += " " + sql(join) + " "
+            stmt += " %s " % sql(join)
         if self._constraint is not None:
             stmt += " WHERE "
             stmt += sql(self._constraint)
@@ -223,7 +251,7 @@ class Delete:
         self._having = None
 
     def __sql__(self, **kwargs):
-        stmt = "DELETE FROM " + sql(self._src, usage="raw")
+        stmt = "DELETE FROM " + sql(self._src, usage="table")
         for join in self._joins:
             stmt += " " + sql(join) + " "
         if self._constraint is not None:
@@ -309,7 +337,7 @@ class Condition:
         return "Condition[%s]" % skip_empty_join(" ", sql(self.lhs), sql(self.op), sql(self.rhs))
 
     def __sql__(self, **kwargs):
-        return "(%s)" % skip_empty_join(" ", sql(self.lhs, usage="lhs"), sql(self.op), sql(self.rhs, usage="rhs"))
+        return "(%s)" % skip_empty_join(" ", sql(self.lhs, usage="value"), sql(self.op), sql(self.rhs, usage="value"))
 
     def __and__(self, rhs):
         return Condition(self, Operator.AND, rhs)
@@ -347,4 +375,28 @@ class Join:
         return self.condition
 
     def __sql__(self, **kwargs):
-        return "%s JOIN %s ON %s" % (self.join_type.upper(), sql(self.tbl, usage="join"), sql(self.join_condition))
+        return "%s JOIN %s ON %s" % (self.join_type.upper(), sql(self.tbl, usage="table-like"), sql(self.join_condition))
+
+class Column(Condition):
+    def __init__(self, table, colname):
+        self.table = table
+        self.colname = colname
+    
+    def __repr__(self):
+        return "Column[%s.%s]" % (sql(self.table), self.colname)
+
+    def __sql__(self, usage=None):
+        if usage in ("column", "column-like"):
+            return self.colname
+        else:
+            return "%s.%s" % (sql(self.table), self.colname)
+
+    def __hash__(self):
+        return hash(self.__sql__())
+        
+    def is_in(self, values):
+        return Condition(
+            self,
+            Literal("IN"),
+            Literal("(%s)" % (",".join(sql(x) for x in values)))
+        )

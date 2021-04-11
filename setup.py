@@ -1,20 +1,18 @@
 
-from setuptools import setup
+from setuptools import setup, find_packages
+
+with open("README.md", "r") as infile:
+    readme = infile.read()
 
 setup(
-    name = "dbwrapper",
-    version = "0.1-prealpha",
-    author = "Austin Zalac",
+    name = "dbwrapper-python",
+    version = "0.1.1",
+    url = "https://github.com/azalac/dbwrapper",
+    author = "azalac",
     description = ("Wraps SQL Syntax into a python API."),
-    packages=[
-        'dbwrapper',
-        'dbwrapper.sqlite',
-        'dbwrapper.postgresql'
-    ],
-    long_description=None,
-    # install_requires = [
-    #     "psycopg2"
-    # ]
+    packages=find_packages(),
+    long_description_content_type="text/markdown",
+    long_description=readme,
     extras_require={
         "postgres": ["psycopg2"]
     }
